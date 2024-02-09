@@ -2,7 +2,6 @@ package types
 
 import (
 	"encoding/hex"
-	"errors"
 
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 )
@@ -69,15 +68,6 @@ func (sig BIP340Signature) MarshalTo(data []byte) (int, error) {
 }
 
 func (sig *BIP340Signature) Unmarshal(data []byte) error {
-	newSig := BIP340Signature(data)
-
-	// ensure that the bytes can be transformed to a *schnorr.Signature object
-	// this includes all format checks
-	_, err := newSig.ToBTCSig()
-	if err != nil {
-		return errors.New("bytes cannot be converted to a *schnorr.Signature object")
-	}
-
 	*sig = data
 	return nil
 }
