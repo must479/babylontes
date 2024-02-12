@@ -82,9 +82,7 @@ func (m *MsgCreateBTCDelegation) ValidateBasic() error {
 		return fmt.Errorf("empty delegator signature")
 	}
 
-	_, err := m.DelegatorSlashingSig.ToBTCSig()
-
-	if err != nil {
+	if _, err := m.DelegatorSlashingSig.ToBTCSig(); err != nil {
 		return fmt.Errorf("invalid delegator slashing signature: %w", err)
 	}
 
@@ -128,9 +126,7 @@ func (m *MsgCreateBTCDelegation) ValidateBasic() error {
 		return fmt.Errorf("invalid unbonding slashing tx: %w", err)
 	}
 
-	_, err = m.DelegatorUnbondingSlashingSig.ToBTCSig()
-
-	if err != nil {
+	if _, err := m.DelegatorUnbondingSlashingSig.ToBTCSig(); err != nil {
 		return fmt.Errorf("invalid delegator unbonding slashing signature: %w", err)
 	}
 
@@ -169,9 +165,7 @@ func (m *MsgAddCovenantSigs) ValidateBasic() error {
 		return fmt.Errorf("empty covenant signature")
 	}
 
-	_, err := m.UnbondingTxSig.ToBTCSig()
-
-	if err != nil {
+	if _, err := m.UnbondingTxSig.ToBTCSig(); err != nil {
 		return fmt.Errorf("invalid covenant unbonding signature: %w", err)
 	}
 
@@ -191,9 +185,7 @@ func (m *MsgBTCUndelegate) ValidateBasic() error {
 		return fmt.Errorf("empty signature from the delegator")
 	}
 
-	_, err := m.UnbondingTxSig.ToBTCSig()
-
-	if err != nil {
+	if _, err := m.UnbondingTxSig.ToBTCSig(); err != nil {
 		return fmt.Errorf("invalid delegator unbonding signature: %w", err)
 	}
 
