@@ -3,15 +3,16 @@ package keeper
 import (
 	"context"
 	"fmt"
+	"time"
 
 	errorsmod "cosmossdk.io/errors"
-
 	sdkmath "cosmossdk.io/math"
 	"github.com/babylonchain/babylon/btcstaking"
 	bbn "github.com/babylonchain/babylon/types"
 	"github.com/babylonchain/babylon/x/btcstaking/types"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
+	"github.com/cosmos/cosmos-sdk/telemetry"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 	"google.golang.org/grpc/codes"
@@ -49,6 +50,8 @@ func (ms msgServer) UpdateParams(goCtx context.Context, req *types.MsgUpdatePara
 
 // CreateFinalityProvider creates a finality provider
 func (ms msgServer) CreateFinalityProvider(goCtx context.Context, req *types.MsgCreateFinalityProvider) (*types.MsgCreateFinalityProviderResponse, error) {
+	defer telemetry.ModuleMeasureSince(types.ModuleName, time.Now(), types.MetricsKeyCreateFinalityProvider)
+
 	// ensure the finality provider address does not already exist
 	ctx := sdk.UnwrapSDKContext(goCtx)
 	// basic stateless checks
@@ -61,11 +64,12 @@ func (ms msgServer) CreateFinalityProvider(goCtx context.Context, req *types.Msg
 		return nil, status.Errorf(codes.InvalidArgument, "invalid proof of possession: %v", err)
 	}
 
-	// ensure commission rate is at least the minimum commission rate in parameters
+	// ensure commission rate is
+	// - at least the minimum commission rate in parameters, and
+	// - at most 1
 	if req.Commission.LT(ms.MinCommissionRate(ctx)) {
 		return nil, types.ErrCommissionLTMinRate.Wrapf("cannot set finality provider commission to less than minimum rate of %s", ms.MinCommissionRate(ctx))
 	}
-
 	if req.Commission.GT(sdkmath.LegacyOneDec()) {
 		return nil, types.ErrCommissionGTMaxRate
 	}
@@ -93,9 +97,49 @@ func (ms msgServer) CreateFinalityProvider(goCtx context.Context, req *types.Msg
 	return &types.MsgCreateFinalityProviderResponse{}, nil
 }
 
+// EditFinalityProvider edits an existing finality provider
+func (ms msgServer) EditFinalityProvider(ctx context.Context, req *types.MsgEditFinalityProvider) (*types.MsgEditFinalityProviderResponse, error) {
+	// basic stateless checks
+	// NOTE: after this, description is guaranteed to be valid
+	if err := req.ValidateBasic(); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	// ensure commission rate is
+	// - at least the minimum commission rate in parameters, and
+	// - at most 1
+	if req.Commission.LT(ms.MinCommissionRate(ctx)) {
+		return nil, types.ErrCommissionLTMinRate.Wrapf("cannot set finality provider commission to less than minimum rate of %s", ms.MinCommissionRate(ctx))
+	}
+	if req.Commission.GT(sdkmath.LegacyOneDec()) {
+		return nil, types.ErrCommissionGTMaxRate
+	}
+
+	// find the finality provider with the given BTC PK
+	fp, err := ms.GetFinalityProvider(ctx, req.BtcPk)
+	if err != nil {
+		return nil, err
+	}
+
+	// ensure the signer corresponds to the finality provider's Babylon address
+	fpBabylonAddr := sdk.AccAddress(fp.BabylonPk.Address())
+	if req.Signer != fpBabylonAddr.String() {
+		return nil, status.Errorf(codes.PermissionDenied, "the signer does not correspond to the finality provider's Babylon address")
+	}
+
+	// all good, update the finality provider and set back
+	fp.Description = req.Description
+	fp.Commission = req.Commission
+	ms.SetFinalityProvider(ctx, fp)
+
+	return &types.MsgEditFinalityProviderResponse{}, nil
+}
+
 // CreateBTCDelegation creates a BTC delegation
 // TODO: refactor this handler. It's now too convoluted
 func (ms msgServer) CreateBTCDelegation(goCtx context.Context, req *types.MsgCreateBTCDelegation) (*types.MsgCreateBTCDelegationResponse, error) {
+	defer telemetry.ModuleMeasureSince(types.ModuleName, time.Now(), types.MetricsKeyCreateBTCDelegation)
+
 	ctx := sdk.UnwrapSDKContext(goCtx)
 	// basic stateless checks
 	if err := req.ValidateBasic(); err != nil {
@@ -382,6 +426,8 @@ func (ms msgServer) CreateBTCDelegation(goCtx context.Context, req *types.MsgCre
 // AddCovenantSig adds signatures from covenants to a BTC delegation
 // TODO: refactor this handler. Now it's too convoluted
 func (ms msgServer) AddCovenantSigs(goCtx context.Context, req *types.MsgAddCovenantSigs) (*types.MsgAddCovenantSigsResponse, error) {
+	defer telemetry.ModuleMeasureSince(types.ModuleName, time.Now(), types.MetricsKeyAddCovenantSigs)
+
 	ctx := sdk.UnwrapSDKContext(goCtx)
 	// basic stateless checks
 	if err := req.ValidateBasic(); err != nil {
@@ -528,6 +574,8 @@ func (ms msgServer) AddCovenantSigs(goCtx context.Context, req *types.MsgAddCove
 // this effectively proves that the BTC delegator wants to unbond and Babylon
 // will consider its BTC delegation unbonded
 func (ms msgServer) BTCUndelegate(goCtx context.Context, req *types.MsgBTCUndelegate) (*types.MsgBTCUndelegateResponse, error) {
+	defer telemetry.ModuleMeasureSince(types.ModuleName, time.Now(), types.MetricsKeyBTCUndelegate)
+
 	ctx := sdk.UnwrapSDKContext(goCtx)
 	// basic stateless checks
 	if err := req.ValidateBasic(); err != nil {
@@ -598,6 +646,8 @@ func (ms msgServer) BTCUndelegate(goCtx context.Context, req *types.MsgBTCUndele
 // SelectiveSlashingEvidence handles the evidence that a finality provider has
 // selectively slashed a BTC delegation
 func (ms msgServer) SelectiveSlashingEvidence(goCtx context.Context, req *types.MsgSelectiveSlashingEvidence) (*types.MsgSelectiveSlashingEvidenceResponse, error) {
+	defer telemetry.ModuleMeasureSince(types.ModuleName, time.Now(), types.MetricsKeySelectiveSlashingEvidence)
+
 	ctx := sdk.UnwrapSDKContext(goCtx)
 	bsParams := ms.GetParams(ctx)
 
